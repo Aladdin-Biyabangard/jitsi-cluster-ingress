@@ -79,8 +79,11 @@ PREOF
     sed -i "s/admins = { \"focus@auth.${DOMAIN}\", \"jvb@auth.${DOMAIN}\" }/admins = { \"focus@auth.${DOMAIN}\", \"jvb@auth.${DOMAIN}\", \"jibri@auth.${DOMAIN}\" }/" "${PROSODY_CFG}" || true
   fi
 
-  # Lobby whitelist for recorder
-  if ! grep -q "muc_lobby_whitelist" "${PROSODY_CFG}"; then
+  # Lobby whitelist for recorder (commented default-u aktiv et)
+  if grep -qE "^[[:space:]]*--[[:space:]]*muc_lobby_whitelist" "${PROSODY_CFG}"; then
+    sed -i "s/-- muc_lobby_whitelist = { \"recorder.${DOMAIN}\" }/muc_lobby_whitelist = { \"recorder.${DOMAIN}\" }/" "${PROSODY_CFG}" || true
+  fi
+  if ! grep -qE "^[[:space:]]*muc_lobby_whitelist" "${PROSODY_CFG}"; then
     sed -i "/main_muc = \"conference.${DOMAIN}\"/a\\    muc_lobby_whitelist = { \"recorder.${DOMAIN}\" }" "${PROSODY_CFG}" || true
   fi
 

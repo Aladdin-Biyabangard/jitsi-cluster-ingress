@@ -116,6 +116,26 @@ resource "google_compute_firewall" "jitsi_internal" {
   target_tags = ["jitsi-control", "jitsi-jvb", "jitsi-jibri"]
 }
 
+# ---------- Cloud NAT (recorder VM-lər xarici IP olmadan apt + Bunny üçün) ----------
+resource "google_compute_router" "nat" {
+  name    = "jitsi-nat-router"
+  network = var.network
+  region  = var.region
+}
+
+resource "google_compute_router_nat" "nat" {
+  name                               = "jitsi-nat"
+  router                             = google_compute_router.nat.name
+  region                             = var.region
+  nat_ip_allocate_option             = "AUTO_ONLY"
+  source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
+
+  log_config {
+    enable = true
+    filter = "ERRORS_ONLY"
+  }
+}
+
 # ---------- Static IPs (yalnız control + jvb) ----------
 resource "google_compute_address" "control" {
   name   = "jitsi-control-ip"

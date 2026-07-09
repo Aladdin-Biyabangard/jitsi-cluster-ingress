@@ -70,6 +70,9 @@ systemctl disable jibri 2>/dev/null || true
 
 mkdir -p /srv/recordings /opt/jitsi-jibri /etc/jitsi/jibri/instances /var/log/jitsi
 chown jibri:jibri /srv/recordings
+# jibri user launch-slot-*.sh yaza bilməlidir
+chown jibri:jibri /opt/jitsi-jibri
+chmod 755 /opt/jitsi-jibri
 # Finalize / upload logları — jibri user yazabilsin (5 paralel slot)
 touch /var/log/jitsi/recording-finalize.log /var/log/jitsi/bunny-uploads.jsonl
 chown -R jibri:jibri /var/log/jitsi
@@ -107,16 +110,22 @@ if [[ -z "${LAUNCH}" || ! -x "${LAUNCH}" ]]; then
   exit 1
 fi
 
-# Wrapper: hər slot üçün ayrı HOME / Xvfb DISPLAY / ALSA
-# (paket launch.sh tez-tez DISPLAY=:0 hardcode edir — ona görə Xvfb-ni özümüz idarə edirik)
+# Wrapper: hər slot üçün ayrı HOME / Xvfb DISPLAY / instance.conf
+# Paket launch.sh -Dconfig.file=/etc/jitsi/jibri/jibri.conf hardcode edir —
+# ona görə hər slot üçün patch edilmiş launch-slot-N.sh yaradırıq.
 cat > /opt/jitsi-jibri/run-jibri-slot.sh <<WRAP
 #!/usr/bin/env bash
 set -euo pipefail
 SLOT="\${1:?slot}"
+CONF="/etc/jitsi/jibri/instances/\${SLOT}.conf"
 export HOME="/var/lib/jibri/slot-\${SLOT}"
 export DISPLAY=":\${SLOT}"
-export JAVA_SYS_PROPS="-Dconfig.file=/etc/jitsi/jibri/instances/\${SLOT}.conf"
 mkdir -p "\${HOME}" "/tmp/jibri-chrome-\${SLOT}" "/tmp/.X11-unix" "/tmp/jibri-upload-\${SLOT}"
+
+if [[ ! -f "\${CONF}" ]]; then
+  echo "Missing instance config: \${CONF}" >&2
+  exit 1
+fi
 
 # Slot üçün Xvfb (əgər yoxdursa)
 if ! pgrep -f "Xvfb :\${SLOT} " >/dev/null 2>&1; then
@@ -128,17 +137,19 @@ if ! pgrep -f "Xvfb :\${SLOT} " >/dev/null 2>&1; then
   sleep 1
 fi
 
-# launch.sh içində DISPLAY=:0 varsa — müvəqqəti patch edilmiş nüsxə
 LAUNCH_SRC="${LAUNCH}"
 LAUNCH_COPY="/opt/jitsi-jibri/launch-slot-\${SLOT}.sh"
 cp "\${LAUNCH_SRC}" "\${LAUNCH_COPY}"
 chmod 755 "\${LAUNCH_COPY}"
+# Hardcoded default jibri.conf → bu slotun instance conf-u
+sed -i -E "s|-Dconfig.file=[^ ]*|-Dconfig.file=\${CONF}|g" "\${LAUNCH_COPY}" || true
+sed -i -E "s|config.file=\"/etc/jitsi/jibri/jibri.conf\"|config.file=\"\${CONF}\"|g" "\${LAUNCH_COPY}" || true
 # Hardcoded :0 → bu slotun display-i
 sed -i -E "s/DISPLAY=:0/DISPLAY=:\${SLOT}/g; s/Xvfb :0/Xvfb :\${SLOT}/g; s/:0 /:\${SLOT} /g" "\${LAUNCH_COPY}" || true
-# Əgər launch artıq Xvfb başladırsa, ikinci dəfə uğursuz ola bilər — ignore
 exec "\${LAUNCH_COPY}"
 WRAP
 chmod 755 /opt/jitsi-jibri/run-jibri-slot.sh
+chown jibri:jibri /opt/jitsi-jibri/run-jibri-slot.sh
 
 cat > /etc/systemd/system/jibri@.service <<UNIT
 [Unit]
