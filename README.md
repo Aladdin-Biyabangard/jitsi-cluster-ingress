@@ -30,8 +30,8 @@ recorder-1..2  e2-standard-8     hər VM-də 5 Jibri → Bunny
 ## Start
 
 ```bash
-git clone https://github.com/<you>/jitsi-cluster.git
-cd jitsi-cluster
+git clone https://github.com/Aladdin-Biyabangard/jitsi-cluster-ingress.git 
+cd jitsi-cluster-ingress
 cp .env.example .env
 nano .env          # doldurun
 ./deploy.sh

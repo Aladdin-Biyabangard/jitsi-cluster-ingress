@@ -79,6 +79,10 @@ chown -R jibri:jibri /var/log/jitsi
 chmod 755 /var/log/jitsi
 chmod 644 /var/log/jitsi/recording-finalize.log /var/log/jitsi/bunny-uploads.jsonl
 
+if [[ -z "${BUNNY_LIBRARY_ID}" || -z "${BUNNY_API_KEY}" ]]; then
+  die "BUNNY_LIBRARY_ID / BUNNY_API_KEY boşdur — recording upload işləməyəcək"
+fi
+
 cat > /opt/jitsi-jibri/bunny.env <<ENV
 BUNNY_LIBRARY_ID=${BUNNY_LIBRARY_ID}
 BUNNY_API_KEY=${BUNNY_API_KEY}
@@ -86,6 +90,7 @@ BUNNY_CDN_HOSTNAME=${BUNNY_CDN_HOSTNAME}
 ENV
 chmod 600 /opt/jitsi-jibri/bunny.env
 chown jibri:jibri /opt/jitsi-jibri/bunny.env
+log "Bunny env yazıldı (library=${BUNNY_LIBRARY_ID})"
 
 cp "${SCRIPT_DIR}/bunny-upload.sh" /opt/jitsi-jibri/bunny-upload.sh
 cp "${SCRIPT_DIR}/finalize_recording.sh" /opt/jitsi-jibri/finalize_recording.sh

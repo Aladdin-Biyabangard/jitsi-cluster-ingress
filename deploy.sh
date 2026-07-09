@@ -52,6 +52,11 @@ BUNNY_LIBRARY_ID="${BUNNY_LIBRARY_ID:-}"
 BUNNY_API_KEY="${BUNNY_API_KEY:-}"
 BUNNY_CDN_HOSTNAME="${BUNNY_CDN_HOSTNAME:-}"
 
+# Recording upload üçün Bunny məcburidir (boş olsa finalize fail olur)
+if [[ -z "${BUNNY_LIBRARY_ID}" || -z "${BUNNY_API_KEY}" ]]; then
+  die "BUNNY_LIBRARY_ID və BUNNY_API_KEY .env-də lazımdır (Stream → Video library ID + API Key, read-only DEYİL)"
+fi
+
 # Adaptive recording capacity:
 #   CONCURRENT_RECORDINGS = eyni anda max recording
 #   RECORDER_COUNT        = VM sayı (az)
@@ -459,11 +464,22 @@ ${GREEN}========================================${NC}
     ${DOMAIN}  →  A  →  ${CONTROL_PUBLIC_IP}
     (JVB media üçün əlavə DNS lazım deyil — IP mapping avtomatikdir)
 
+  DNS yoxla (Google/Cloudflare — router cache aldatmasın):
+    dig +short ${DOMAIN} A @8.8.8.8
+    # Gözlənilən: ${CONTROL_PUBLIC_IP}
+    # Brauzer NXDOMAIN verirsə: router köhnə negative-cache saxlayır.
+    # Tez test:  echo '${CONTROL_PUBLIC_IP} ${DOMAIN}' | sudo tee -a /etc/hosts
+    # və ya DNS-i 8.8.8.8 / 1.1.1.1 et.
+
   Recording (Bunny Stream — Ingress portal ilə eyni):
     Meeting-də "..." → Start recording
     Bitəndə MP4 → create video + PUT → library ${BUNNY_LIBRARY_ID}
     Upload OK → serverdən silinir
     Log: /var/log/jitsi/bunny-uploads.jsonl (video_id = portal bunny_video_id)
+
+  Jibri yoxla (Cloud Shell-dən, meet-control-da YOX):
+    gcloud compute ssh recorder-1 --zone=${GCP_ZONE} --project=${GCP_PROJECT_ID} --tunnel-through-iap -- \\
+      "systemctl is-active jibri@{1..5}; sudo test -s /opt/jitsi-jibri/bunny.env && echo bunny_ok"
 
   Schedule (${ENABLE_SCHEDULE}):
     Start UTC: ${SCHEDULE_START_UTC}  (cron: ${SCHEDULE_START_CRON})

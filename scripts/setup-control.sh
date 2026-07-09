@@ -99,7 +99,26 @@ PREOF
   if ! grep -q "muc_max_occupants" "${PROSODY_CFG}"; then
     sed -i "s/Component \"conference.${DOMAIN}\" \"muc\"/Component \"conference.${DOMAIN}\" \"muc\"\n    muc_max_occupants = 15/" "${PROSODY_CFG}" || true
   fi
+  # Option tək kifayət deyil — modul da aktiv olmalıdır
+  if grep -q "muc_max_occupants" "${PROSODY_CFG}" && ! grep -q '"muc_max_occupants"' "${PROSODY_CFG}"; then
+    sed -i "/Component \"conference.${DOMAIN}\" \"muc\"/,/modules_enabled = {/{
+      /modules_enabled = {/a\\        \"muc_max_occupants\";
+    }" "${PROSODY_CFG}" || true
+  fi
 fi
+
+# Prosody 0.12 + yeni jitsi-meet-prosody: prosody.util.* → util.* (join/speakerstats break olmasın)
+# https://github.com/jitsi/jitsi-meet/commit/5e9c44ff73863f876f1a77d306ded5a3bb98ad90
+for _pf in /usr/share/jitsi-meet/prosody-plugins/mod_speakerstats_component.lua \
+           /usr/share/jitsi-meet/prosody-plugins/mod_room_metadata_component.lua \
+           /usr/share/jitsi-meet/prosody-plugins/mod_short_lived_token.lua; do
+  if [[ -f "${_pf}" ]]; then
+    sed -i \
+      -e 's/require "prosody\.util\./require "util./g' \
+      -e "s/require 'prosody\.util\./require 'util./g" \
+      "${_pf}" || true
+  fi
+done
 
 # Prosody: remote JVB/Jibri üçün bütün interfeyslərdə dinlə
 PROSODY_MAIN="/etc/prosody/prosody.cfg.lua"

@@ -11,6 +11,7 @@ NC='\033[0m'
 log()  { echo -e "${GREEN}[+]${NC} $*"; }
 warn() { echo -e "${YELLOW}[!]${NC} $*"; }
 err()  { echo -e "${RED}[x]${NC} $*" >&2; }
+die()  { err "$*"; exit 1; }
 
 require_root() {
   if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
