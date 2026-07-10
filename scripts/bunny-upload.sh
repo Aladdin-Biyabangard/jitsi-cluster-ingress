@@ -114,11 +114,13 @@ create_video() {
   echo "${resp}" | jq -r '.guid // empty'
 }
 
-# Resolve teacher Bunny collection via ingress portal (room UUID → collection_id).
+# Resolve teacher+group Bunny collection via ingress portal (room UUID → collection_id).
 # Optional: PORTAL_UPLOAD_META_URL + PORTAL_UPLOAD_META_TOKEN in bunny.env
+# Also writes group_name to ${WORKDIR}/meta_group.txt when available.
 resolve_collection_id() {
   local room="$1"
-  local base token url resp cid
+  local base token url resp cid gname
+  : > "${WORKDIR}/meta_group.txt"
   base="${PORTAL_UPLOAD_META_URL:-}"
   token="${PORTAL_UPLOAD_META_TOKEN:-}"
   if [[ -z "${base}" || -z "${token}" || -z "${room}" ]]; then
@@ -136,6 +138,8 @@ resolve_collection_id() {
     return 0
   }
   cid="$(echo "${resp}" | jq -r '.collection_id // empty' 2>/dev/null || true)"
+  gname="$(echo "${resp}" | jq -r '.group_name // empty' 2>/dev/null || true)"
+  [[ -n "${gname}" ]] && printf '%s' "${gname}" > "${WORKDIR}/meta_group.txt"
   # Yalnız GUID qəbul et — log/HTML qarışmasın
   if [[ ! "${cid}" =~ ^[0-9a-fA-F-]{8,}$ ]]; then
     cid=""
@@ -144,9 +148,27 @@ resolve_collection_id() {
     log "upload-meta: collection yoxdur (room=${room}) — library root-a yazılacaq"
     log "upload-meta response: ${resp}"
   else
-    log "upload-meta: collection=${cid} (room=${room})"
+    log "upload-meta: collection=${cid} group=${gname:-?} (room=${room})"
   fi
   echo "${cid}"
+}
+
+set_video_collection() {
+  local video_id="$1"
+  local collection_id="$2"
+  [[ -z "${video_id}" || -z "${collection_id}" ]] && return 0
+  local body
+  body="$(jq -nc --arg c "${collection_id}" '{collectionId:$c}')"
+  curl -sS --connect-timeout 15 --max-time 30 -X POST \
+    "${STREAM_API}/library/${LIBRARY_ID}/videos/${video_id}" \
+    -H "AccessKey: ${API_KEY}" \
+    -H "Accept: application/json" \
+    -H "Content-Type: application/json" \
+    --data "${body}" >/dev/null 2>"${WORKDIR}/setcol.err" || {
+    err "set_video_collection fail: $(cat "${WORKDIR}/setcol.err" 2>/dev/null || true)"
+    return 1
+  }
+  log "Video ${video_id} → collection ${collection_id}"
 }
 
 upload_video_file() {
@@ -165,10 +187,15 @@ upload_video_file() {
 }
 
 COLLECTION_ID="$(resolve_collection_id "${ROOM_NAME}")"
+GROUP_NAME="$(cat "${WORKDIR}/meta_group.txt" 2>/dev/null || true)"
 
 for SRC in "${MP4S[@]}"; do
   FNAME="$(basename "${SRC}")"
-  TITLE="${ROOM_NAME} · ${DATE_STAMP} · ${FNAME}"
+  if [[ -n "${GROUP_NAME}" ]]; then
+    TITLE="${GROUP_NAME} · ${DATE_STAMP} · live"
+  else
+    TITLE="${ROOM_NAME} · ${DATE_STAMP} · ${FNAME}"
+  fi
   # Bunny title limit ~255
   TITLE="${TITLE:0:250}"
 
@@ -180,6 +207,9 @@ for SRC in "${MP4S[@]}"; do
     continue
   fi
   log "Video ID: ${VIDEO_ID}"
+  if [[ -n "${COLLECTION_ID}" ]]; then
+    set_video_collection "${VIDEO_ID}" "${COLLECTION_ID}" || true
+  fi
 
   log "Upload: ${SRC}"
   HTTP_CODE="$(upload_video_file "${VIDEO_ID}" "${SRC}")"

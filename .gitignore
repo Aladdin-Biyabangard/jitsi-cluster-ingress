@@ -20,3 +20,4 @@ known_hosts
 outputs.json
 credentials.json
 service-account.json
+secrets/portal-control-sa.json

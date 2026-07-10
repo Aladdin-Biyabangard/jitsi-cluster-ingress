@@ -91,15 +91,27 @@ if [[ "${DEPLOY_PROFILE:-}" == "full" ]]; then
 fi
 
 hhmm_to_cron() {
-  # HH:MM → "MM HH * * *"
+  # HH:MM → "MM HH * * DOW"  (DOW default: * = hər gün)
   local t="$1"
+  local dow="${2:-*}"
   local hh="${t%%:*}"
   local mm="${t##*:}"
-  echo "${mm} ${hh} * * *"
+  # Leading zero OK for Cloud Scheduler (09 → 9 also fine; keep as-is)
+  echo "${mm} ${hh} * * ${dow}"
 }
 
-SCHEDULE_START_CRON="$(hhmm_to_cron "${SCHEDULE_START_UTC}")"
-SCHEDULE_STOP_CRON="$(hhmm_to_cron "${SCHEDULE_STOP_UTC}")"
+SCHEDULE_WEEKDAYS="${SCHEDULE_WEEKDAYS:-1-5}"
+SCHEDULE_START_CRON="$(hhmm_to_cron "${SCHEDULE_START_UTC}" "${SCHEDULE_WEEKDAYS}")"
+SCHEDULE_STOP_CRON="$(hhmm_to_cron "${SCHEDULE_STOP_UTC}" "${SCHEDULE_WEEKDAYS}")"
+# Şənbə pəncərəsi (boş buraxılsa job yaradılmır)
+SCHEDULE_SAT_START_UTC="${SCHEDULE_SAT_START_UTC:-}"
+SCHEDULE_SAT_STOP_UTC="${SCHEDULE_SAT_STOP_UTC:-}"
+SCHEDULE_SAT_START_CRON=""
+SCHEDULE_SAT_STOP_CRON=""
+if [[ -n "${SCHEDULE_SAT_START_UTC}" && -n "${SCHEDULE_SAT_STOP_UTC}" ]]; then
+  SCHEDULE_SAT_START_CRON="$(hhmm_to_cron "${SCHEDULE_SAT_START_UTC}" "6")"
+  SCHEDULE_SAT_STOP_CRON="$(hhmm_to_cron "${SCHEDULE_SAT_STOP_UTC}" "6")"
+fi
 
 # ---------- Prerequisites (avtomatik quraşdırma) ----------
 # shellcheck source=scripts/install-prereqs.sh
@@ -446,6 +458,7 @@ if [[ "${ENABLE_SCHEDULE}" == "true" ]]; then
   if [[ -n "${SA_EMAIL}" ]]; then
     export GCP_PROJECT_ID GCP_ZONE GCP_REGION
     export SCHEDULE_START_CRON SCHEDULE_STOP_CRON SCHEDULE_TIMEZONE
+    export SCHEDULE_SAT_START_CRON SCHEDULE_SAT_STOP_CRON
     export SCHEDULER_SA_EMAIL="${SA_EMAIL}"
     bash "${ROOT}/scripts/install-scheduler-jobs.sh" || warn "Scheduler jobs qismən uğursuz"
   else
@@ -487,8 +500,10 @@ ${GREEN}========================================${NC}
       "systemctl is-active jibri@{1..5}; sudo test -s /opt/jitsi-jibri/bunny.env && echo bunny_ok"
 
   Schedule (${ENABLE_SCHEDULE}):
-    Start UTC: ${SCHEDULE_START_UTC}  (cron: ${SCHEDULE_START_CRON})
-    Stop  UTC: ${SCHEDULE_STOP_UTC}   (cron: ${SCHEDULE_STOP_CRON})
+    Weekdays (${SCHEDULE_WEEKDAYS:-1-5}): ${SCHEDULE_START_UTC} → ${SCHEDULE_STOP_UTC}  (${SCHEDULE_TIMEZONE})
+    Saturday: ${SCHEDULE_SAT_START_UTC:-off} → ${SCHEDULE_SAT_STOP_UTC:-off}  (${SCHEDULE_TIMEZONE})
+    cron wd: ${SCHEDULE_START_CRON} / ${SCHEDULE_STOP_CRON}
+    cron sat: ${SCHEDULE_SAT_START_CRON:-—} / ${SCHEDULE_SAT_STOP_CRON:-—}
 
   Manual start/stop:
     GCP_PROJECT_ID=${GCP_PROJECT_ID} GCP_ZONE=${GCP_ZONE} \\
