@@ -129,10 +129,13 @@ fi
 
 # --- Jicofo ---
 log "Jicofo konfiqurasiyası..."
+# focus user yuxarıda register olunur; hostname localhost — client_proxy service-unavailable olmasın
 cat > /etc/jitsi/jicofo/jicofo.conf <<JICOFO
 jicofo {
   xmpp: {
     client: {
+      hostname: "127.0.0.1"
+      port: 5222
       client-proxy: "focus.${DOMAIN}"
       xmpp-domain: "${DOMAIN}"
       domain: "auth.${DOMAIN}"
@@ -205,6 +208,15 @@ if ! grep -q "JITSI_CUSTOM_15_USERS" "${MEET_CONFIG}"; then
     echo "config.websocket = 'wss://${DOMAIN}/xmpp-websocket';"
     sed "s/__DOMAIN__/${DOMAIN}/g" "${SCRIPT_DIR}/../config/meet-custom.js"
   } >> "${MEET_CONFIG}"
+else
+  # Mövcud install: kritik join fix-ləri yenilə
+  grep -q "^config.conferenceRequestUrl" "${MEET_CONFIG}" || \
+    echo "config.conferenceRequestUrl = 'https://${DOMAIN}/conference-request/v1';" >> "${MEET_CONFIG}"
+  grep -q "^config.focusUserJid" "${MEET_CONFIG}" || \
+    echo "config.focusUserJid = 'focus@auth.${DOMAIN}';" >> "${MEET_CONFIG}"
+  grep -q "^config.disableDeepLinking" "${MEET_CONFIG}" || \
+    echo "config.disableDeepLinking = true;" >> "${MEET_CONFIG}"
+  sed -i "s/^config.defaultLanguage = 'az';/config.defaultLanguage = 'en';/" "${MEET_CONFIG}" || true
 fi
 
 # --- Firewall ---

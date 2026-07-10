@@ -115,6 +115,95 @@ if [[ -z "${LAUNCH}" || ! -x "${LAUNCH}" ]]; then
   exit 1
 fi
 
+# ChromeDriver bəzən DISPLAY-i child Chrome-a ötürmür → wrapper məcburi inject edir
+if [[ -x /usr/bin/google-chrome-stable && ! -x /usr/bin/google-chrome-stable.real ]]; then
+  mv /usr/bin/google-chrome-stable /usr/bin/google-chrome-stable.real
+fi
+cat > /usr/local/bin/jibri-chrome-wrapper <<'CWRAP'
+#!/usr/bin/env bash
+set -euo pipefail
+# ChromeDriver often passes DISPLAY=:0 — always derive from slot, never trust :0
+SLOT=""
+for arg in "$@"; do
+  case "$arg" in
+    --user-data-dir=/tmp/jibri-chrome-*)
+      s="${arg##*-}"
+      [[ "$s" =~ ^[0-9]+$ ]] && SLOT="$s"
+      ;;
+  esac
+done
+if [[ -z "$SLOT" && "${HOME:-}" =~ slot-([0-9]+) ]]; then
+  SLOT="${BASH_REMATCH[1]}"
+fi
+if [[ -z "$SLOT" && -f "${HOME:-}/.jibri-slot" ]]; then
+  SLOT="$(cat "${HOME}/.jibri-slot")"
+fi
+if [[ -n "$SLOT" ]]; then
+  export DISPLAY=":${SLOT}"
+elif [[ -z "${DISPLAY:-}" || "${DISPLAY}" == ":0" ]]; then
+  for n in 1 2 3 4 5; do
+    if [[ -S "/tmp/.X11-unix/X${n}" ]]; then
+      export DISPLAY=":${n}"
+      break
+    fi
+  done
+fi
+export DISPLAY="${DISPLAY:-:1}"
+REAL="/usr/bin/google-chrome-stable.real"
+[[ -x "$REAL" ]] || REAL="/opt/google/chrome/google-chrome"
+exec "$REAL" "$@"
+CWRAP
+chmod 755 /usr/local/bin/jibri-chrome-wrapper
+ln -sfn /usr/local/bin/jibri-chrome-wrapper /usr/bin/google-chrome-stable
+ln -sfn /usr/local/bin/jibri-chrome-wrapper /usr/bin/google-chrome
+
+# Jibri Java often still has DISPLAY=:0 → ffmpeg x11grab fails on :0.0
+if [[ -x /usr/bin/ffmpeg && ! -L /usr/bin/ffmpeg && ! -x /usr/bin/ffmpeg.real ]]; then
+  mv /usr/bin/ffmpeg /usr/bin/ffmpeg.real
+fi
+cat > /usr/local/bin/jibri-ffmpeg-wrapper <<'FWRAP'
+#!/usr/bin/env bash
+set -euo pipefail
+SLOT=""
+if [[ "${HOME:-}" =~ slot-([0-9]+) ]]; then
+  SLOT="${BASH_REMATCH[1]}"
+elif [[ -f "${HOME:-}/.jibri-slot" ]]; then
+  SLOT="$(cat "${HOME}/.jibri-slot")"
+fi
+if [[ -z "$SLOT" ]]; then
+  for n in 1 2 3 4 5; do
+    if [[ -S "/tmp/.X11-unix/X${n}" ]]; then
+      SLOT="$n"
+      break
+    fi
+  done
+fi
+SLOT="${SLOT:-1}"
+export DISPLAY=":${SLOT}"
+ARGS=()
+for a in "$@"; do
+  case "$a" in
+    :0|:0.0|:0.0+0,0)
+      ARGS+=(":${SLOT}.0+0,0")
+      ;;
+    *)
+      a="${a//:0.0+0,0/:${SLOT}.0+0,0}"
+      a="${a//:0.0/:${SLOT}.0}"
+      ARGS+=("$a")
+      ;;
+  esac
+done
+echo "$(date -Iseconds) DISPLAY=${DISPLAY} SLOT=${SLOT} ffmpeg ${ARGS[*]}" >> /tmp/jibri-ffmpeg-wrapper.log 2>/dev/null || true
+REAL="/usr/bin/ffmpeg.real"
+[[ -x "$REAL" ]] || REAL="/usr/bin/ffmpeg"
+exec "$REAL" "${ARGS[@]}"
+FWRAP
+chmod 755 /usr/local/bin/jibri-ffmpeg-wrapper
+ln -sfn /usr/local/bin/jibri-ffmpeg-wrapper /usr/local/bin/ffmpeg
+if [[ -x /usr/bin/ffmpeg.real ]]; then
+  ln -sfn /usr/local/bin/jibri-ffmpeg-wrapper /usr/bin/ffmpeg
+fi
+
 # Wrapper: hər slot üçün ayrı HOME / Xvfb DISPLAY / instance.conf
 # Paket launch.sh -Dconfig.file=/etc/jitsi/jibri/jibri.conf hardcode edir —
 # ona görə hər slot üçün patch edilmiş launch-slot-N.sh yaradırıq.
@@ -126,21 +215,27 @@ CONF="/etc/jitsi/jibri/instances/\${SLOT}.conf"
 export HOME="/var/lib/jibri/slot-\${SLOT}"
 export DISPLAY=":\${SLOT}"
 mkdir -p "\${HOME}" "/tmp/jibri-chrome-\${SLOT}" "/tmp/.X11-unix" "/tmp/jibri-upload-\${SLOT}"
+echo "\${SLOT}" > "\${HOME}/.jibri-slot"
 
 if [[ ! -f "\${CONF}" ]]; then
   echo "Missing instance config: \${CONF}" >&2
   exit 1
 fi
 
-# Slot üçün Xvfb (əgər yoxdursa)
-if ! pgrep -f "Xvfb :\${SLOT} " >/dev/null 2>&1; then
-  if ! command -v Xvfb >/dev/null 2>&1; then
-    echo "Xvfb yoxdur — xvfb paketini quraşdırın" >&2
-    exit 1
-  fi
-  Xvfb ":\${SLOT}" -screen 0 1280x720x24 -ac +extension RANDR >/tmp/xvfb-\${SLOT}.log 2>&1 &
-  sleep 1
+# Slot üçün Xvfb (həmişə təmiz start)
+pkill -f "Xvfb :\${SLOT} " >/dev/null 2>&1 || true
+sleep 0.3
+if ! command -v Xvfb >/dev/null 2>&1; then
+  echo "Xvfb yoxdur — xvfb paketini quraşdırın" >&2
+  exit 1
 fi
+Xvfb ":\${SLOT}" -screen 0 1280x720x24 -ac +extension RANDR >/tmp/xvfb-\${SLOT}.log 2>&1 &
+for _ in \$(seq 1 10); do
+  if DISPLAY=":\${SLOT}" xdpyinfo >/dev/null 2>&1 || [[ -S "/tmp/.X11-unix/X\${SLOT}" ]]; then
+    break
+  fi
+  sleep 0.5
+done
 
 LAUNCH_SRC="${LAUNCH}"
 LAUNCH_COPY="/opt/jitsi-jibri/launch-slot-\${SLOT}.sh"
@@ -151,10 +246,20 @@ sed -i -E "s|-Dconfig.file=[^ ]*|-Dconfig.file=\${CONF}|g" "\${LAUNCH_COPY}" || 
 sed -i -E "s|config.file=\"/etc/jitsi/jibri/jibri.conf\"|config.file=\"\${CONF}\"|g" "\${LAUNCH_COPY}" || true
 # Hardcoded :0 → bu slotun display-i
 sed -i -E "s/DISPLAY=:0/DISPLAY=:\${SLOT}/g; s/Xvfb :0/Xvfb :\${SLOT}/g; s/:0 /:\${SLOT} /g" "\${LAUNCH_COPY}" || true
-exec "\${LAUNCH_COPY}"
+exec env -i \
+  PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+  HOME="\${HOME}" \
+  DISPLAY=":\${SLOT}" \
+  USER=jibri \
+  LOGNAME=jibri \
+  LANG="\${LANG:-C.UTF-8}" \
+  "\${LAUNCH_COPY}"
 WRAP
 chmod 755 /opt/jitsi-jibri/run-jibri-slot.sh
 chown jibri:jibri /opt/jitsi-jibri/run-jibri-slot.sh
+
+# xdpyinfo optional (Xvfb socket check fallback var)
+apt-get install -y -qq x11-utils >/dev/null 2>&1 || true
 
 cat > /etc/systemd/system/jibri@.service <<UNIT
 [Unit]
@@ -168,6 +273,7 @@ Group=jibri
 UMask=0022
 Type=simple
 Environment=HOME=/var/lib/jibri/slot-%i
+Environment=DISPLAY=:%i
 ExecStart=/opt/jitsi-jibri/run-jibri-slot.sh %i
 Restart=on-failure
 RestartSec=5
@@ -211,19 +317,36 @@ for i in $(seq 1 "${JIBRI_PER_VM}"); do
   mkdir -p "${REC_DIR}" "${SLOT_HOME}" "/tmp/jibri-chrome-${i}" "/tmp/jibri-upload-${i}"
   chown -R jibri:jibri "${REC_DIR}" "${SLOT_HOME}" "/tmp/jibri-chrome-${i}" "/tmp/jibri-upload-${i}"
 
-  # Hər slot öz loopback kartına bağlanır
+  # Hər slot öz loopback kartına bağlanır.
+  # Jibri ffmpeg default: plug:bsnoop — pcm.bsnoop mütləqdir.
+  # Chrome playback hw:N,0,0 → capture hw:N,1,0 (aloop cross-cable).
   cat > "${SLOT_HOME}/.asoundrc" <<ASOUND
 pcm.!default {
-  type plug
-  slave.pcm "dsnoop_${CARD}"
+  type asym
+  playback.pcm "amix"
+  capture.pcm "asnoop"
 }
-pcm.dsnoop_${CARD} {
-  type dsnoop
-  ipc_key $((8000 + CARD))
+pcm.amix {
+  type dmix
+  ipc_key $((7000 + CARD))
   slave {
     pcm "hw:${CARD},0,0"
     channels 2
+    rate 48000
   }
+}
+pcm.asnoop {
+  type dsnoop
+  ipc_key $((8000 + CARD))
+  slave {
+    pcm "hw:${CARD},1,0"
+    channels 2
+    rate 48000
+  }
+}
+pcm.bsnoop {
+  type plug
+  slave.pcm "asnoop"
 }
 ctl.!default {
   type hw
@@ -285,16 +408,20 @@ jibri {
       "--use-fake-ui-for-media-stream",
       "--start-maximized",
       "--kiosk",
-      "--enabled",
       "--disable-infobars",
       "--autoplay-policy=no-user-gesture-required",
       "--ignore-certificate-errors",
+      "--no-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
       "--user-data-dir=/tmp/jibri-chrome-${i}"
     ]
   }
 
   ffmpeg {
     resolution = "1280x720"
+    audio-source = "alsa"
+    audio-device = "plug:bsnoop"
   }
 }
 JIBRI

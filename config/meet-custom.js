@@ -5,6 +5,10 @@
 config.defaultLanguage = 'en';
 config.disableDeepLinking = true;
 
+// XMPP client_proxy bəzən service-unavailable verir — HTTP focus allocation daha sabitdir
+config.conferenceRequestUrl = 'https://__DOMAIN__/conference-request/v1';
+config.focusUserJid = 'focus@auth.__DOMAIN__';
+
 config.channelLastN = 15;
 config.resolution = 720;
 config.constraints = {
