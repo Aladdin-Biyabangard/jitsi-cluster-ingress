@@ -406,6 +406,8 @@ jibri {
   chrome {
     flags = [
       "--use-fake-ui-for-media-stream",
+      "--window-size=1920,1080",
+      "--window-position=0,0",
       "--start-maximized",
       "--kiosk",
       "--disable-infobars",
@@ -414,6 +416,7 @@ jibri {
       "--no-sandbox",
       "--disable-dev-shm-usage",
       "--disable-gpu",
+      "--force-device-scale-factor=1",
       "--user-data-dir=/tmp/jibri-chrome-${i}"
     ]
   }
