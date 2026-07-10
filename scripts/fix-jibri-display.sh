@@ -118,7 +118,7 @@ echo "${SLOT}" > "${HOME}/.jibri-slot"
 
 pkill -f "Xvfb :${SLOT} " >/dev/null 2>&1 || true
 sleep 0.3
-Xvfb ":${SLOT}" -screen 0 1280x720x24 -ac +extension RANDR >/tmp/xvfb-${SLOT}.log 2>&1 &
+Xvfb ":${SLOT}" -screen 0 1920x1080x24 -ac +extension RANDR >/tmp/xvfb-${SLOT}.log 2>&1 &
 for _ in $(seq 1 15); do
   [[ -S "/tmp/.X11-unix/X${SLOT}" ]] && break
   sleep 0.4
@@ -171,7 +171,7 @@ systemctl is-active jibri@1 jibri@2 jibri@3 jibri@4 jibri@5
 
 # Smoke ffmpeg wrapper
 sudo -u jibri env HOME=/var/lib/jibri/slot-4 DISPLAY=:0 \
-  /usr/bin/ffmpeg -f x11grab -video_size 1280x720 -i :0.0+0,0 -frames:v 1 -y /tmp/ffmpeg-smoke.mp4 \
+  /usr/bin/ffmpeg -f x11grab -video_size 1920x1080 -i :0.0+0,0 -frames:v 1 -y /tmp/ffmpeg-smoke.mp4 \
   >/tmp/ffmpeg-smoke.out 2>&1 || true
 echo "ffmpeg wrapper log:"; tail -3 /tmp/jibri-ffmpeg-wrapper.log 2>/dev/null || true
 if grep -q "Cannot open display" /tmp/ffmpeg-smoke.out 2>/dev/null; then

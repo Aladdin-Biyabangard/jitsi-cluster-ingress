@@ -229,7 +229,7 @@ if ! command -v Xvfb >/dev/null 2>&1; then
   echo "Xvfb yoxdur — xvfb paketini quraşdırın" >&2
   exit 1
 fi
-Xvfb ":\${SLOT}" -screen 0 1280x720x24 -ac +extension RANDR >/tmp/xvfb-\${SLOT}.log 2>&1 &
+Xvfb ":\${SLOT}" -screen 0 1920x1080x24 -ac +extension RANDR >/tmp/xvfb-\${SLOT}.log 2>&1 &
 for _ in \$(seq 1 10); do
   if DISPLAY=":\${SLOT}" xdpyinfo >/dev/null 2>&1 || [[ -S "/tmp/.X11-unix/X\${SLOT}" ]]; then
     break
@@ -419,7 +419,10 @@ jibri {
   }
 
   ffmpeg {
-    resolution = "1280x720"
+    resolution = "1920x1080"
+    framerate = 30
+    video-encode-preset-recording = "veryfast"
+    h264-constant-rate-factor = 18
     audio-source = "alsa"
     audio-device = "plug:bsnoop"
   }

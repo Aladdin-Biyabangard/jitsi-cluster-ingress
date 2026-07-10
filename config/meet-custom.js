@@ -1,5 +1,5 @@
 // JITSI_CUSTOM_15_USERS — live server (meet.ingress.academy) + recording
-// 15 nəfərlik qruplar, 720p, simulcast, Jibri recording
+// 15 nəfərlik qruplar, 1080p, simulcast, Jibri recording
 
 // az dil paketi jitsi-meet-web-də yoxdur (main-az.json 404) — join UI qıra bilər
 config.defaultLanguage = 'en';
@@ -10,10 +10,10 @@ config.conferenceRequestUrl = 'https://__DOMAIN__/conference-request/v1';
 config.focusUserJid = 'focus@auth.__DOMAIN__';
 
 config.channelLastN = 15;
-config.resolution = 720;
+config.resolution = 1080;
 config.constraints = {
     video: {
-        height: { ideal: 720, max: 720, min: 180 }
+        height: { ideal: 1080, max: 1080, min: 180 }
     }
 };
 
