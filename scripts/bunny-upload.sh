@@ -9,7 +9,8 @@
 set -euo pipefail
 
 LOG_TAG="bunny-upload"
-log()  { echo "[$(date -Iseconds)] [${LOG_TAG}] $*"; }
+# log → stderr (stdout yalnız collection_id / video_id üçün — command substitution pozulmasın)
+log()  { echo "[$(date -Iseconds)] [${LOG_TAG}] $*" >&2; }
 err()  { echo "[$(date -Iseconds)] [${LOG_TAG}] ERROR: $*" >&2; }
 
 # Əskik alətlər — mümkün qədər avtomatik (root deyilsə xəbərdarlıq)
@@ -92,8 +93,13 @@ fi
 
 create_video() {
   local title="$1"
+  local collection_id="${2:-}"
   local body resp
-  body="$(jq -nc --arg t "${title}" '{title:$t}')"
+  if [[ -n "${collection_id}" ]]; then
+    body="$(jq -nc --arg t "${title}" --arg c "${collection_id}" '{title:$t, collectionId:$c}')"
+  else
+    body="$(jq -nc --arg t "${title}" '{title:$t}')"
+  fi
   resp="$(curl -sS --connect-timeout 15 --max-time 60 -X POST \
     "${STREAM_API}/library/${LIBRARY_ID}/videos" \
     -H "AccessKey: ${API_KEY}" \
@@ -106,6 +112,41 @@ create_video() {
 
   # guid field (Bunny Stream create response — portal bunny_stream.create_video)
   echo "${resp}" | jq -r '.guid // empty'
+}
+
+# Resolve teacher Bunny collection via ingress portal (room UUID → collection_id).
+# Optional: PORTAL_UPLOAD_META_URL + PORTAL_UPLOAD_META_TOKEN in bunny.env
+resolve_collection_id() {
+  local room="$1"
+  local base token url resp cid
+  base="${PORTAL_UPLOAD_META_URL:-}"
+  token="${PORTAL_UPLOAD_META_TOKEN:-}"
+  if [[ -z "${base}" || -z "${token}" || -z "${room}" ]]; then
+    echo ""
+    return 0
+  fi
+  base="${base%/}"
+  url="${base}/portal/api/jitsi/room/${room}/upload-meta/"
+  resp="$(curl -sS --connect-timeout 10 --max-time 30 \
+    -H "Authorization: Bearer ${token}" \
+    -H "Accept: application/json" \
+    "${url}" 2>"${WORKDIR}/meta.err")" || {
+    err "upload-meta curl fail: $(cat "${WORKDIR}/meta.err" 2>/dev/null || true)"
+    echo ""
+    return 0
+  }
+  cid="$(echo "${resp}" | jq -r '.collection_id // empty' 2>/dev/null || true)"
+  # Yalnız GUID qəbul et — log/HTML qarışmasın
+  if [[ ! "${cid}" =~ ^[0-9a-fA-F-]{8,}$ ]]; then
+    cid=""
+  fi
+  if [[ -z "${cid}" ]]; then
+    log "upload-meta: collection yoxdur (room=${room}) — library root-a yazılacaq"
+    log "upload-meta response: ${resp}"
+  else
+    log "upload-meta: collection=${cid} (room=${room})"
+  fi
+  echo "${cid}"
 }
 
 upload_video_file() {
@@ -123,14 +164,16 @@ upload_video_file() {
   echo "${http_code}"
 }
 
+COLLECTION_ID="$(resolve_collection_id "${ROOM_NAME}")"
+
 for SRC in "${MP4S[@]}"; do
   FNAME="$(basename "${SRC}")"
   TITLE="${ROOM_NAME} · ${DATE_STAMP} · ${FNAME}"
   # Bunny title limit ~255
   TITLE="${TITLE:0:250}"
 
-  log "Create video: ${TITLE}"
-  VIDEO_ID="$(create_video "${TITLE}" || true)"
+  log "Create video: ${TITLE}${COLLECTION_ID:+ (collection=${COLLECTION_ID})}"
+  VIDEO_ID="$(create_video "${TITLE}" "${COLLECTION_ID}" || true)"
   if [[ -z "${VIDEO_ID}" || "${VIDEO_ID}" == "null" ]]; then
     err "Bunny Stream video ID qaytarmadı"
     cat "${RESP_FILE}" 2>/dev/null || true
@@ -148,7 +191,7 @@ for SRC in "${MP4S[@]}"; do
       PLAY_HINT="https://${CDN_HOST}/${VIDEO_ID}/play_720p.mp4"
     fi
 
-    log "OK (${HTTP_CODE}): library=${LIBRARY_ID} video=${VIDEO_ID}"
+    log "OK (${HTTP_CODE}): library=${LIBRARY_ID} video=${VIDEO_ID} collection=${COLLECTION_ID:-root}"
     log "Embed: ${EMBED_URL}"
     [[ -n "${PLAY_HINT}" ]] && log "CDN hint: ${PLAY_HINT}"
 
@@ -158,11 +201,12 @@ for SRC in "${MP4S[@]}"; do
       --arg room "${ROOM_NAME}" \
       --arg video_id "${VIDEO_ID}" \
       --arg library_id "${LIBRARY_ID}" \
+      --arg collection_id "${COLLECTION_ID}" \
       --arg embed_url "${EMBED_URL}" \
       --arg cdn_host "${CDN_HOST}" \
       --arg uploaded_at "$(date -Iseconds)" \
       --argjson http_code "${HTTP_CODE}" \
-      '{local:$local,room:$room,video_id:$video_id,library_id:$library_id,embed_url:$embed_url,cdn_hostname:$cdn_host,uploaded_at:$uploaded_at,http_code:$http_code}')" \
+      '{local:$local,room:$room,video_id:$video_id,library_id:$library_id,collection_id:$collection_id,embed_url:$embed_url,cdn_hostname:$cdn_host,uploaded_at:$uploaded_at,http_code:$http_code}')" \
       >> "${META_OUT}"
 
     rm -f "${SRC}"

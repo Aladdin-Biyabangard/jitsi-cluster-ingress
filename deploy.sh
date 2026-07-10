@@ -51,6 +51,9 @@ SCHEDULE_TIMEZONE="${SCHEDULE_TIMEZONE:-UTC}"
 BUNNY_LIBRARY_ID="${BUNNY_LIBRARY_ID:-}"
 BUNNY_API_KEY="${BUNNY_API_KEY:-}"
 BUNNY_CDN_HOSTNAME="${BUNNY_CDN_HOSTNAME:-}"
+# Optional: Jibri → ingress portal (room UUID → teacher Bunny collection)
+PORTAL_UPLOAD_META_URL="${PORTAL_UPLOAD_META_URL:-}"
+PORTAL_UPLOAD_META_TOKEN="${PORTAL_UPLOAD_META_TOKEN:-}"
 
 # Recording upload üçün Bunny məcburidir (boş olsa finalize fail olur)
 if [[ -z "${BUNNY_LIBRARY_ID}" || -z "${BUNNY_API_KEY}" ]]; then
@@ -407,6 +410,8 @@ export JIBRI_PER_VM='${JIBRI_PER_VM}'
 export BUNNY_LIBRARY_ID='${BUNNY_LIBRARY_ID}'
 export BUNNY_API_KEY='${BUNNY_API_KEY}'
 export BUNNY_CDN_HOSTNAME='${BUNNY_CDN_HOSTNAME}'
+export PORTAL_UPLOAD_META_URL='${PORTAL_UPLOAD_META_URL}'
+export PORTAL_UPLOAD_META_TOKEN='${PORTAL_UPLOAD_META_TOKEN}'
 bash /tmp/jitsi-cluster/scripts/setup-jibri.sh
 REMOTE
   ) > "${SECRETS_DIR}/setup-${name}.log" 2>&1 &
@@ -473,7 +478,7 @@ ${GREEN}========================================${NC}
 
   Recording (Bunny Stream — Ingress portal ilə eyni):
     Meeting-də "..." → Start recording
-    Bitəndə MP4 → create video + PUT → library ${BUNNY_LIBRARY_ID}
+    Bitəndə MP4 → portal upload-meta (müəllim collection) → create video + PUT → library ${BUNNY_LIBRARY_ID}
     Upload OK → serverdən silinir
     Log: /var/log/jitsi/bunny-uploads.jsonl (video_id = portal bunny_video_id)
 

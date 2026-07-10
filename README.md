@@ -76,13 +76,15 @@ Stop / meeting bitir
 finalize_recording.sh  (fayl settle gözləyir)
     ↓
 bunny-upload.sh
-    1) POST /library/{id}/videos          → video GUID
-    2) PUT  /library/{id}/videos/{guid}   → MP4 binary
+    0) GET  portal /api/jitsi/room/{uuid}/upload-meta/  → teacher collectionId
+    1) POST /library/{id}/videos  (+ collectionId)      → video GUID
+    2) PUT  /library/{id}/videos/{guid}                 → MP4 binary
     ↓
 HTTP 2xx  →  lokal MP4 + qovluq silinir
 ```
 
 Ingress portal (`bunny_stream.py`) ilə eyni Bunny Stream API.
+Hər müəllimin videosu öz Bunny collection-una düşür (`TeacherProfile.bunny_collection_id`).
 
 Log: hər recorder-də `/var/log/jitsi/bunny-uploads.jsonl`
 

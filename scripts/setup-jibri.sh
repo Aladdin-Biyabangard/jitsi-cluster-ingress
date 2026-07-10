@@ -87,10 +87,12 @@ cat > /opt/jitsi-jibri/bunny.env <<ENV
 BUNNY_LIBRARY_ID=${BUNNY_LIBRARY_ID}
 BUNNY_API_KEY=${BUNNY_API_KEY}
 BUNNY_CDN_HOSTNAME=${BUNNY_CDN_HOSTNAME}
+PORTAL_UPLOAD_META_URL=${PORTAL_UPLOAD_META_URL:-}
+PORTAL_UPLOAD_META_TOKEN=${PORTAL_UPLOAD_META_TOKEN:-}
 ENV
 chmod 600 /opt/jitsi-jibri/bunny.env
 chown jibri:jibri /opt/jitsi-jibri/bunny.env
-log "Bunny env yazıldı (library=${BUNNY_LIBRARY_ID})"
+log "Bunny env yazıldı (library=${BUNNY_LIBRARY_ID}${PORTAL_UPLOAD_META_URL:+, portal meta=on})"
 
 cp "${SCRIPT_DIR}/bunny-upload.sh" /opt/jitsi-jibri/bunny-upload.sh
 cp "${SCRIPT_DIR}/finalize_recording.sh" /opt/jitsi-jibri/finalize_recording.sh
