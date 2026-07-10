@@ -13,12 +13,13 @@ PROJECT_ID="${GCP_PROJECT_ID:?}"
 ZONE="${GCP_ZONE:?}"
 
 INSTANCES=(meet-control meet-jvb)
-# recorder-1 .. recorder-N (və köhnə jibri-* adları)
-mapfile -t JIBRIS < <(gcloud compute instances list \
+# recorder-1 .. recorder-N (və köhnə jibri-* adları) — bash 3.2 uyğun
+while IFS= read -r _name; do
+  [[ -n "${_name}" ]] && INSTANCES+=("${_name}")
+done < <(gcloud compute instances list \
   --project="${PROJECT_ID}" \
   --filter="name~^recorder- OR name~^jibri-" \
   --format="value(name)")
-INSTANCES+=("${JIBRIS[@]}")
 
 for name in "${INSTANCES[@]}"; do
   [[ -z "${name}" ]] && continue

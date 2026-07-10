@@ -136,6 +136,18 @@ GCP_PROJECT_ID=... GCP_ZONE=europe-west1-b ./scripts/schedule-all.sh start
 GCP_PROJECT_ID=... GCP_ZONE=europe-west1-b ./scripts/schedule-all.sh stop
 ```
 
+**24/7 açıq saxlamaq** (scheduler pause + VM start):
+
+```bash
+./scripts/scheduler-pause-keep-on.sh
+```
+
+**Yenidən avtomatik cədvəl** (scheduler resume; pəncərədədirsə VM start):
+
+```bash
+./scripts/scheduler-resume.sh
+```
+
 ---
 
 ## Fayl strukturu
@@ -158,6 +170,8 @@ jitsi-cluster/
 │   ├── bunny-upload.sh
 │   ├── finalize_recording.sh
 │   ├── schedule-all.sh
+│   ├── scheduler-pause-keep-on.sh
+│   ├── scheduler-resume.sh
 │   └── install-scheduler-jobs.sh
 └── terraform/
     ├── main.tf
