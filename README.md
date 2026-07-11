@@ -64,6 +64,33 @@ DNS A record: `DOMAIN → meet-control IP` (Cloudflare token versəniz avtomatik
 
 ---
 
+## Domain dəyişmə (`migrate-domain.sh`)
+
+Meet domain-ini dəyişəndə **yalnız nginx və ya yalnız LE** kifayət etmir — Prosody, `config.js`, Jicofo, JVB, Jibri və sertifikat eyni domain olmalıdır. Əks halda `ERR_CERT_COMMON_NAME_INVALID` / `JitsiMeetExternalAPI is not defined` / `conferenceRequestFailed` çıxır.
+
+```bash
+# 1) DNS: NEW → meet-control public IP (A record)
+# 2) .env-də DOMAIN=meet.new.example (istəyə görə)
+./migrate-domain.sh --from meet.old.example --to meet.new.example
+```
+
+Skript nə edir:
+
+1. **meet-control** — Prosody/Nginx/`config.js`/Jicofo/Coturn + Prosody user-lər + Let's Encrypt  
+2. **meet-jvb** — `jvb.conf` + `/etc/hosts`  
+3. **recorder-*** — Jibri conf + hosts  
+4. Lokal `.env` `DOMAIN=` yenilənir; Cloudflare token varsa DNS də
+
+```bash
+./migrate-domain.sh --from meet.edulora.online --to meet.ingress.academy
+./migrate-domain.sh --from meet.old.com --to meet.new.com --skip-le   # LE-siz
+./migrate-domain.sh --from meet.old.com --dry-run                     # yalnız plan
+```
+
+**Portal:** production-da `JITSI_DOMAIN` də eyni NEW domain olmalıdır, sonra portal restart.
+
+---
+
 ## Recording axını
 
 ```
