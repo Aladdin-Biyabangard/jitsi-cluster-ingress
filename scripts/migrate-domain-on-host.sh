@@ -124,17 +124,29 @@ migrate_control() {
     log "  temporary cert copied ${OLD} → ${NEW} (LE sonra yeniləyəcək)"
   fi
 
-  # Prosody certs from meet cert
+  # Prosody certs: main domain = LE/meet cert; auth.* = CN-specific self-signed
   mkdir -p /etc/prosody/certs
   if [[ -f "/etc/jitsi/meet/${NEW}.crt" ]]; then
     cp -f "/etc/jitsi/meet/${NEW}.crt" "/etc/prosody/certs/${NEW}.crt"
     cp -f "/etc/jitsi/meet/${NEW}.key" "/etc/prosody/certs/${NEW}.key"
-    for h in "auth.${NEW}" "guest.${NEW}" "recorder.${NEW}" "conference.${NEW}" "internal.auth.${NEW}" "focus.${NEW}"; do
-      cp -f "/etc/prosody/certs/${NEW}.crt" "/etc/prosody/certs/${h}.crt"
-      cp -f "/etc/prosody/certs/${NEW}.key" "/etc/prosody/certs/${h}.key"
-    done
-    chown -R root:prosody /etc/prosody/certs 2>/dev/null || chown -R prosody:prosody /etc/prosody/certs || true
-    chmod 640 /etc/prosody/certs/*.key 2>/dev/null || true
+  fi
+  for h in "auth.${NEW}" "guest.${NEW}" "recorder.${NEW}" "conference.${NEW}" "internal.auth.${NEW}" "focus.${NEW}"; do
+    openssl req -new -x509 -days 3650 -nodes \
+      -out "/etc/prosody/certs/${h}.crt" \
+      -keyout "/etc/prosody/certs/${h}.key" \
+      -subj "/CN=${h}" >/dev/null 2>&1 || true
+  done
+  chown -R root:prosody /etc/prosody/certs 2>/dev/null || chown -R prosody:prosody /etc/prosody/certs || true
+  chmod 640 /etc/prosody/certs/*.key 2>/dev/null || true
+  chmod 644 /etc/prosody/certs/*.crt 2>/dev/null || true
+
+  # Jicofo: brewery lowercase + disable cert verify (LE SAN ≠ auth.*)
+  if [[ -f /etc/jitsi/jicofo/jicofo.conf ]]; then
+    sed -i "s/${OLD_ESC}/${NEW}/g" /etc/jitsi/jicofo/jicofo.conf
+    sed -i 's/JvbBrewery@/jvbbrewery@/g; s/JibriBrewery@/jibribrewery@/g' /etc/jitsi/jicofo/jicofo.conf
+    if ! grep -q 'disable-certificate-verification' /etc/jitsi/jicofo/jicofo.conf; then
+      sed -i '/username: "focus"/a\      disable-certificate-verification: true' /etc/jitsi/jicofo/jicofo.conf || true
+    fi
   fi
 
   # --- Nginx ---
@@ -228,14 +240,19 @@ migrate_control() {
       if [[ "${le_rc}" -ne 0 ]]; then
         warn "Let's Encrypt uğursuz (DNS/80?) — self-signed/köhnə cert qala bilər"
       else
-        # Refresh prosody certs from LE install path
+        # Refresh prosody certs from LE install path (main domain only;
+        # auth.* must stay CN-specific self-signed)
         if [[ -f "/etc/jitsi/meet/${NEW}.crt" ]]; then
           cp -f "/etc/jitsi/meet/${NEW}.crt" "/etc/prosody/certs/${NEW}.crt"
           cp -f "/etc/jitsi/meet/${NEW}.key" "/etc/prosody/certs/${NEW}.key"
           for h in "auth.${NEW}" "guest.${NEW}" "recorder.${NEW}" "conference.${NEW}" "internal.auth.${NEW}" "focus.${NEW}"; do
-            cp -f "/etc/prosody/certs/${NEW}.crt" "/etc/prosody/certs/${h}.crt"
-            cp -f "/etc/prosody/certs/${NEW}.key" "/etc/prosody/certs/${h}.key"
+            openssl req -new -x509 -days 3650 -nodes \
+              -out "/etc/prosody/certs/${h}.crt" \
+              -keyout "/etc/prosody/certs/${h}.key" \
+              -subj "/CN=${h}" >/dev/null 2>&1 || true
           done
+          chown -R root:prosody /etc/prosody/certs 2>/dev/null || true
+          chmod 640 /etc/prosody/certs/*.key 2>/dev/null || true
         fi
       fi
     else

@@ -141,11 +141,14 @@ jicofo {
       domain: "auth.${DOMAIN}"
       username: "focus"
       password: "${JICOFO_PASSWORD}"
+      # LE cert yalnız ${DOMAIN} üçündür; auth.* SAN yoxdur — localhost XMPP üçün lazımdır
+      disable-certificate-verification: true
     }
     trusted-domains: [ "recorder.${DOMAIN}" ]
   }
   bridge: {
-    brewery-jid: "JvbBrewery@internal.auth.${DOMAIN}"
+    # setup-jvb.sh ilə eyni (lowercase) — əks halda ayrı MUC otağı yaranır
+    brewery-jid: "jvbbrewery@internal.auth.${DOMAIN}"
     selection-strategy: "SplitBridgeSelectionStrategy"
     stress-threshold: 0.8
   }
@@ -156,7 +159,7 @@ jicofo {
     strip-simulcast: false
   }
   jibri: {
-    brewery-jid: "JibriBrewery@internal.auth.${DOMAIN}"
+    brewery-jid: "jibribrewery@internal.auth.${DOMAIN}"
     pending-timeout: 90 seconds
   }
   sctp {
@@ -240,6 +243,25 @@ if [[ -x /usr/share/jitsi-meet/scripts/install-letsencrypt-cert.sh ]]; then
   echo "y" | /usr/share/jitsi-meet/scripts/install-letsencrypt-cert.sh "${ADMIN_EMAIL}" "${DOMAIN}" \
     || warn "Let's Encrypt uğursuz — self-signed qalır (DNS yoxlayın)"
 fi
+
+# LE cert yalnız DOMAIN SAN-ı ehtiva edir. Prosody auth.* / conference.* üçün
+# ayrıca self-signed (CN=auth.DOMAIN) lazımdır — yoxsa jicofo TLS fail:
+# "Certificate does not authenticate auth.DOMAIN"
+log "Prosody subdomain sertifikatları..."
+mkdir -p /etc/prosody/certs
+if [[ -f "/etc/jitsi/meet/${DOMAIN}.crt" ]]; then
+  cp -f "/etc/jitsi/meet/${DOMAIN}.crt" "/etc/prosody/certs/${DOMAIN}.crt"
+  cp -f "/etc/jitsi/meet/${DOMAIN}.key" "/etc/prosody/certs/${DOMAIN}.key"
+fi
+for h in "auth.${DOMAIN}" "internal.auth.${DOMAIN}" "conference.${DOMAIN}" "recorder.${DOMAIN}" "guest.${DOMAIN}" "focus.${DOMAIN}"; do
+  openssl req -new -x509 -days 3650 -nodes \
+    -out "/etc/prosody/certs/${h}.crt" \
+    -keyout "/etc/prosody/certs/${h}.key" \
+    -subj "/CN=${h}" >/dev/null 2>&1 || true
+done
+chown -R root:prosody /etc/prosody/certs 2>/dev/null || chown -R prosody:prosody /etc/prosody/certs || true
+chmod 640 /etc/prosody/certs/*.key 2>/dev/null || true
+chmod 644 /etc/prosody/certs/*.crt 2>/dev/null || true
 
 systemctl restart prosody
 systemctl restart jicofo
