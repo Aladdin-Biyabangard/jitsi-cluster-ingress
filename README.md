@@ -224,6 +224,8 @@ Daha çox paralel recording: `CONCURRENT_RECORDINGS` artırın və ya [Quota](ht
 | Problem | Həll |
 |---------|------|
 | `CPUS_ALL_REGIONS` exceeded | `RECORDER_COUNT` / `JIBRI_MACHINE_TYPE` azaldın və ya quota |
+| `connection refused` (Terraform) | Cloud Shell → GCP API şəbəkəsi; bir az sonra `./deploy.sh` |
+| `409 alreadyExists` (NAT/IP/VM) | `deploy.sh` avtomatik import edir (`tf-import-existing.sh`, NAT daxil) |
 | Recording düyməsi yoxdur | `journalctl -u 'jibri@*' -n 50` |
 | JVB qoşulmur | Prosody 5222 + `jitsi-allow-internal` |
 | Bunny upload fail | `/var/log/jitsi/recording-finalize.log`, `bunny.env` |

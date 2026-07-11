@@ -78,6 +78,31 @@ sa_exists() {
 
 _log "Mövcud GCP resursları Terraform state-ə yoxlanır/import edilir..."
 
+# Cloud NAT (destroy yarımçıq qalanda tez-tez 409 alreadyExists verir)
+router_exists() {
+  gcloud compute routers describe "$1" \
+    --project="${GCP_PROJECT_ID}" --region="${GCP_REGION}" \
+    --format='value(name)' >/dev/null 2>&1
+}
+nat_exists() {
+  gcloud compute routers nats describe "$1" \
+    --router="$2" \
+    --project="${GCP_PROJECT_ID}" --region="${GCP_REGION}" \
+    --format='value(name)' >/dev/null 2>&1
+}
+
+if router_exists "jitsi-nat-router"; then
+  tf_import 'google_compute_router.nat' \
+    "projects/${GCP_PROJECT_ID}/regions/${GCP_REGION}/routers/jitsi-nat-router" \
+    "${GCP_PROJECT_ID}/${GCP_REGION}/jitsi-nat-router"
+fi
+if nat_exists "jitsi-nat" "jitsi-nat-router"; then
+  # google provider ID formatları
+  tf_import 'google_compute_router_nat.nat' \
+    "${GCP_PROJECT_ID}/${GCP_REGION}/jitsi-nat-router/jitsi-nat" \
+    "projects/${GCP_PROJECT_ID}/regions/${GCP_REGION}/routers/jitsi-nat-router/nats/jitsi-nat"
+fi
+
 if addr_exists "jitsi-control-ip"; then
   tf_import 'google_compute_address.control' \
     "projects/${GCP_PROJECT_ID}/regions/${GCP_REGION}/addresses/jitsi-control-ip" \
