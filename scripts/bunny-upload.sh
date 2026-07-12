@@ -77,7 +77,40 @@ if [[ ${#MP4S[@]} -eq 0 ]]; then
   exit 1
 fi
 
-ROOM_NAME="$(basename "${RECORDING_DIR}" | sed 's/[^a-zA-Z0-9._-]/_/g')"
+# Jibri recording dir basename = session_id (NOT the Meet room).
+# Real room is in metadata.json meeting_url, or the MP4 prefix (callName).
+resolve_room_name() {
+  local dir="$1"
+  local meta url room fname base
+  meta="${dir}/metadata.json"
+  if [[ -f "${meta}" ]]; then
+    url="$(jq -r '.meeting_url // .meetingUrl // empty' "${meta}" 2>/dev/null || true)"
+    if [[ -n "${url}" ]]; then
+      # https://meet.example.com/ROOM?foo → ROOM
+      room="$(printf '%s' "${url}" | sed -E 's|[?#].*$||; s|/*$||; s|^.*/||')"
+      room="$(printf '%s' "${room}" | sed 's/[^a-zA-Z0-9._-]/_/g')"
+      if [[ -n "${room}" ]]; then
+        echo "${room}"
+        return 0
+      fi
+    fi
+  fi
+  # Fallback: FileSink names files "{callName}_{timestamp}.mp4"
+  fname="$(basename "${MP4S[0]}")"
+  base="${fname%.*}"
+  if [[ "${base}" =~ ^(.+)_[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}$ ]]; then
+    room="$(printf '%s' "${BASH_REMATCH[1]}" | sed 's/[^a-zA-Z0-9._-]/_/g')"
+    if [[ -n "${room}" ]]; then
+      echo "${room}"
+      return 0
+    fi
+  fi
+  # Last resort (usually Jibri session_id — portal will 404)
+  basename "${dir}" | sed 's/[^a-zA-Z0-9._-]/_/g'
+}
+
+ROOM_NAME="$(resolve_room_name "${RECORDING_DIR}")"
+log "Resolved room name: ${ROOM_NAME} (dir=$(basename "${RECORDING_DIR}"))"
 DATE_STAMP="$(date +%Y-%m-%d)"
 OK=0
 META_OUT="/var/log/jitsi/bunny-uploads.jsonl"

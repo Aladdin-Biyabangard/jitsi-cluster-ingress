@@ -132,6 +132,10 @@ Ingress portal (`bunny_stream.py`) ilə eyni Bunny Stream API.
 Hər müəllimin videosu öz Bunny collection-una düşür (`TeacherProfile.bunny_collection_id`).
 Portalda lesson dərhal publish olunur (tələbələr görə bilir).
 
+**Vacib:** Jibri recording qovluğunun adı session ID-dir; real Meet room
+`metadata.json` → `meeting_url` (və ya MP4 callName) ilə götürülür — əks halda
+upload-meta `room not found` verir və video library root-a düşür.
+
 Log: hər recorder-də `/var/log/jitsi/bunny-uploads.jsonl`
 
 ---
