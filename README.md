@@ -91,6 +91,21 @@ Skript nə edir:
 
 ---
 
+## Bunny key yeniləmə (`update-bunny.sh`)
+
+Cluster artıq işləyir; yalnız Bunny library/API key (və ya portal upload-meta) dəyişib:
+
+```bash
+# 1) .env-də BUNNY_LIBRARY_ID / BUNNY_API_KEY (və istəyə görə PORTAL_UPLOAD_META_*)
+nano .env
+# 2) bütün recorder-lərdə bunny.env yenilə
+./update-bunny.sh
+```
+
+Jibri restart və `./deploy.sh` lazım deyil. Növbəti recording upload yeni key ilə gedir.
+
+---
+
 ## Recording axını
 
 ```
@@ -226,6 +241,7 @@ Daha çox paralel recording: `CONCURRENT_RECORDINGS` artırın və ya [Quota](ht
 | `CPUS_ALL_REGIONS` exceeded | `RECORDER_COUNT` / `JIBRI_MACHINE_TYPE` azaldın və ya quota |
 | `connection refused` (Terraform) | Cloud Shell → GCP API şəbəkəsi; bir az sonra `./deploy.sh` |
 | `409 alreadyExists` (NAT/IP/VM) | `deploy.sh` avtomatik import edir (`tf-import-existing.sh`, NAT daxil) |
+| Bunny key/library | `.env` yenilə → `./update-bunny.sh` |
 | `Not ready yet` / ingress UI fərqli | `./repair-join.sh` (JVB+focus+Jibri Prosody auth) |
 | Recording düyməsi yoxdur | `journalctl -u 'jibri@*' -n 50` |
 | JVB qoşulmur | Prosody 5222 + `jitsi-allow-internal` |
