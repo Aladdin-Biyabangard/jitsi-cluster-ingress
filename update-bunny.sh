@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # ============================================================
-# update-bunny.sh — Bunny Stream + portal upload-meta yenilə
+# update-bunny.sh — Bunny Stream + portal upload-meta + upload script
 #
 # .env-dəki BUNNY_* / PORTAL_UPLOAD_META_* dəyərlərini bütün
-# recorder VM-lərdə /opt/jitsi-jibri/bunny.env-ə yazır.
+# recorder VM-lərdə /opt/jitsi-jibri/bunny.env-ə yazır və
+# bunny-upload.sh / finalize_recording.sh-ı yeniləyir.
 # Full deploy və ya Jibri restart lazım deyil.
 #
 # İstifadə:
@@ -34,12 +35,14 @@ while [[ $# -gt 0 ]]; do
       cat <<EOF
 Usage: ./update-bunny.sh [--dry-run]
 
-.env-dən oxuyur və recorder-lərdə bunny.env yeniləyir:
+.env-dən oxuyur və recorder-lərdə bunny.env + upload script yeniləyir:
   BUNNY_LIBRARY_ID
   BUNNY_API_KEY
   BUNNY_CDN_HOSTNAME          (optional)
   PORTAL_UPLOAD_META_URL      (optional)
   PORTAL_UPLOAD_META_TOKEN    (optional)
+  scripts/bunny-upload.sh
+  scripts/finalize_recording.sh
 EOF
       exit 0
       ;;
@@ -48,6 +51,8 @@ EOF
 done
 
 [[ -f "${ROOT}/.env" ]] || die ".env tapılmadı"
+[[ -f "${ROOT}/scripts/bunny-upload.sh" ]] || die "scripts/bunny-upload.sh yoxdur"
+[[ -f "${ROOT}/scripts/finalize_recording.sh" ]] || die "scripts/finalize_recording.sh yoxdur"
 set -a
 # shellcheck disable=SC1091
 source "${ROOT}/.env"
@@ -90,8 +95,9 @@ JUMP_OPTS=(
   -o "ProxyCommand=ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null -i ${SSH_PRIV} -W %h:%p ubuntu@${CONTROL_PUBLIC_IP}"
 )
 
-TMP_ENV="$(mktemp)"
-trap 'rm -f "${TMP_ENV}"' EXIT
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "${TMP_DIR}"' EXIT
+TMP_ENV="${TMP_DIR}/bunny.env.new"
 cat > "${TMP_ENV}" <<EOF
 BUNNY_LIBRARY_ID=${BUNNY_LIBRARY_ID}
 BUNNY_API_KEY=${BUNNY_API_KEY}
@@ -100,6 +106,8 @@ PORTAL_UPLOAD_META_URL=${PORTAL_UPLOAD_META_URL}
 PORTAL_UPLOAD_META_TOKEN=${PORTAL_UPLOAD_META_TOKEN}
 EOF
 chmod 600 "${TMP_ENV}"
+cp "${ROOT}/scripts/bunny-upload.sh" "${TMP_DIR}/bunny-upload.sh"
+cp "${ROOT}/scripts/finalize_recording.sh" "${TMP_DIR}/finalize_recording.sh"
 
 KEY_HINT="${BUNNY_API_KEY:0:8}…"
 log "Bunny update"
@@ -120,16 +128,23 @@ for idx in "${!JIBRI_NAMES[@]}"; do
   ip="${JIBRI_PRIVATE_IPS[$idx]}"
   log "→ ${name} (${ip})"
   if scp -q "${ssh_opts[@]}" "${JUMP_OPTS[@]}" \
-      "${TMP_ENV}" "ubuntu@${ip}:/tmp/bunny.env.new" \
+      "${TMP_ENV}" \
+      "${TMP_DIR}/bunny-upload.sh" \
+      "${TMP_DIR}/finalize_recording.sh" \
+      "ubuntu@${ip}:/tmp/" \
     && ssh "${ssh_opts[@]}" "${JUMP_OPTS[@]}" "ubuntu@${ip}" "sudo bash -s" <<'REMOTE'
 set -euo pipefail
 mkdir -p /opt/jitsi-jibri
 mv /tmp/bunny.env.new /opt/jitsi-jibri/bunny.env
 chmod 600 /opt/jitsi-jibri/bunny.env
 chown jibri:jibri /opt/jitsi-jibri/bunny.env
+install -m 755 -o jibri -g jibri /tmp/bunny-upload.sh /opt/jitsi-jibri/bunny-upload.sh
+install -m 755 -o jibri -g jibri /tmp/finalize_recording.sh /opt/jitsi-jibri/finalize_recording.sh
+rm -f /tmp/bunny-upload.sh /tmp/finalize_recording.sh
 grep -E '^BUNNY_LIBRARY_ID=|^BUNNY_CDN_HOSTNAME=|^PORTAL_UPLOAD_META_URL=' /opt/jitsi-jibri/bunny.env
 test -s /opt/jitsi-jibri/bunny.env
-echo "bunny.env OK"
+test -x /opt/jitsi-jibri/bunny-upload.sh
+echo "bunny.env + upload scripts OK"
 REMOTE
   then
     log "${name} yeniləndi"
@@ -160,7 +175,7 @@ ${GREEN}========================================${NC}
   Library: ${BUNNY_LIBRARY_ID}
   Recorders: ${#JIBRI_NAMES[@]}
 
-  Növbəti recording upload yeni key ilə gedəcək.
-  Jibri restart lazım deyil.
+  Növbəti recording: Bunny upload + portal published lesson
+  (DD.MM.YYYY-part-N). Jibri restart lazım deyil.
 
 EOF

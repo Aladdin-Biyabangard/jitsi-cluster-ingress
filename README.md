@@ -102,7 +102,8 @@ nano .env
 ./update-bunny.sh
 ```
 
-Jibri restart və `./deploy.sh` lazım deyil. Növbəti recording upload yeni key ilə gedir.
+Jibri restart və `./deploy.sh` lazım deyil. Növbəti recording upload yeni key ilə gedir;
+`bunny-upload.sh` də yenilənir (portal published lesson callback daxil).
 
 ---
 
@@ -121,12 +122,15 @@ bunny-upload.sh
     0) GET  portal /api/jitsi/room/{uuid}/upload-meta/  → teacher collectionId
     1) POST /library/{id}/videos  (+ collectionId)      → video GUID
     2) PUT  /library/{id}/videos/{guid}                 → MP4 binary
+    3) POST portal /api/jitsi/room/{uuid}/recording-complete/
+         → published GroupLesson ``DD.MM.YYYY-part-N`` (task-siz)
     ↓
 HTTP 2xx  →  lokal MP4 + qovluq silinir
 ```
 
 Ingress portal (`bunny_stream.py`) ilə eyni Bunny Stream API.
 Hər müəllimin videosu öz Bunny collection-una düşür (`TeacherProfile.bunny_collection_id`).
+Portalda lesson dərhal publish olunur (tələbələr görə bilir).
 
 Log: hər recorder-də `/var/log/jitsi/bunny-uploads.jsonl`
 

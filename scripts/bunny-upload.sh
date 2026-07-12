@@ -171,6 +171,41 @@ set_video_collection() {
   log "Video ${video_id} → collection ${collection_id}"
 }
 
+# Tell ingress portal to create a draft GroupLesson for this Bunny video.
+# Best-effort: Bunny upload already succeeded — failure is logged, not fatal.
+notify_portal_recording_complete() {
+  local room="$1"
+  local video_id="$2"
+  local base token url body resp http_code attempt
+  base="${PORTAL_UPLOAD_META_URL:-}"
+  token="${PORTAL_UPLOAD_META_TOKEN:-}"
+  if [[ -z "${base}" || -z "${token}" || -z "${room}" || -z "${video_id}" ]]; then
+    log "recording-complete skip (portal url/token/room/video missing)"
+    return 0
+  fi
+  base="${base%/}"
+  url="${base}/portal/api/jitsi/room/${room}/recording-complete/"
+  body="$(jq -nc --arg v "${video_id}" '{video_id:$v}')"
+  for attempt in 1 2 3; do
+    http_code="$(curl -sS -o "${WORKDIR}/recording-complete.json" -w '%{http_code}' \
+      --connect-timeout 10 --max-time 30 \
+      -X POST "${url}" \
+      -H "Authorization: Bearer ${token}" \
+      -H "Accept: application/json" \
+      -H "Content-Type: application/json" \
+      --data "${body}" 2>"${WORKDIR}/recording-complete.err" || echo "000")"
+    if [[ "${http_code}" =~ ^20[0-9]$ ]]; then
+      resp="$(cat "${WORKDIR}/recording-complete.json" 2>/dev/null || true)"
+      log "recording-complete OK (${http_code}): ${resp}"
+      return 0
+    fi
+    err "recording-complete attempt ${attempt}/3 HTTP ${http_code}: $(cat "${WORKDIR}/recording-complete.err" 2>/dev/null; cat "${WORKDIR}/recording-complete.json" 2>/dev/null || true)"
+    sleep $((attempt * 2))
+  done
+  err "recording-complete failed for room=${room} video_id=${video_id} — lesson not auto-created"
+  return 1
+}
+
 upload_video_file() {
   local video_id="$1"
   local file_path="$2"
@@ -238,6 +273,9 @@ for SRC in "${MP4S[@]}"; do
       --argjson http_code "${HTTP_CODE}" \
       '{local:$local,room:$room,video_id:$video_id,library_id:$library_id,collection_id:$collection_id,embed_url:$embed_url,cdn_hostname:$cdn_host,uploaded_at:$uploaded_at,http_code:$http_code}')" \
       >> "${META_OUT}"
+
+    # Auto-create published lesson on ingress portal (title: DD.MM.YYYY-part-N)
+    notify_portal_recording_complete "${ROOM_NAME}" "${VIDEO_ID}" || true
 
     rm -f "${SRC}"
     OK=1
